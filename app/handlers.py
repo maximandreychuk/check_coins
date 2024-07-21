@@ -1,6 +1,6 @@
 import csv
 import requests
-import os
+import sqlite3
 import time
 from .utils import convertStr
 from . import keyboards as kb
@@ -14,6 +14,8 @@ from random import randint
 
 
 router = Router()
+conn = sqlite3.connect('database.db', check_same_thread=False)
+cursor = conn.cursor()
 
 
 class Coin(StatesGroup):
@@ -24,10 +26,39 @@ class Coin(StatesGroup):
 
 @router.message(Command('start'))
 async def start(message: Message):
+    with conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS coins (
+                id INTEGER PRIMARY KEY,
+                name REAL,
+                min REAL,
+                max REAL,
+                cap REAL
+    );
+        """)
     await message.answer(f'/choose_coin - пройти процесс добавления монеты для отслеживания \n'
                          '/get_coins - показать все доступные для отслеживания монеты\n'
                          '/start - нажмите для просмотра доступных команд\n'
-                         '/reload_coins - обновить список топ 100 валют')
+                         '/reload_coins - обновить список топ 100 валют\n')
+    #  '/clear_coins - очистить отслеживаемые монеты\n'
+    #  '/my_coins - все мои отслеживаемые монеты')
+
+
+@router.message(Command('my_coins'))
+async def clear_db(message: Message):
+    cursor.execute(
+        f'SELECT * FROM coins;')
+    res = cursor.fetchall()
+    print(res)
+    await message.answer(f"(Монета, Минимум, Максимум, Цена)\n{res[0][1:]}")
+
+
+@router.message(Command('clear_coins'))
+async def clear_db(message: Message):
+    cursor.execute(
+        f'DELETE FROM coins;')
+    conn.commit()
+    await message.answer('Больше нет отслеживаемых монет\nНачать заново /choose_coins')
 
 
 @router.message(Command('reload_coins'))
@@ -93,6 +124,12 @@ async def add_name(message: Message, state: FSMContext):
         current_cap = convertStr(current_cap.split('$')[1])
         await message.answer(f'Ссылка {coins[message.text]}\nТекущая цена {current_cap}$')
         await state.update_data(name=message.text)
+        data = await state.get_data()
+        cursor.execute(
+            f'INSERT INTO coins (name) SELECT("{data['name']}") WHERE NOT EXISTS (SELECT name FROM coins WHERE name = "{data['name']}") LIMIT 1;')
+        conn.commit()
+        cursor.execute(f'UPDATE coins SET cap = "{current_cap}" WHERE name = "{data['name']}"')
+        conn.commit()
         await state.set_state(Coin.min_value)
         await message.answer('Введите минимальное значение')
     else:
@@ -102,6 +139,10 @@ async def add_name(message: Message, state: FSMContext):
 @router.message(Coin.min_value)
 async def add_min_value(message: Message, state: FSMContext):
     await state.update_data(min_value=message.text)
+    data = await state.get_data()
+    cursor.execute(
+        f'UPDATE coins SET min = "{data['min_value']}" WHERE name = "{data['name']}"')
+    conn.commit()
     await state.set_state(Coin.max_value)
     await message.answer('Введите максимальное значение')
 
@@ -109,13 +150,16 @@ async def add_min_value(message: Message, state: FSMContext):
 @router.message(Coin.max_value)
 async def add_min_value(message: Message, state: FSMContext):
     await state.update_data(max_value=message.text)
+    data = await state.get_data()
+    cursor.execute(
+        f'UPDATE coins SET max = "{data['max_value']}" WHERE name = "{data['name']}"')
+    conn.commit()
     await message.answer(f'Нажмите, чтобы отслеживать', reply_markup=kb.track)
 
 
 @router.callback_query(F.data == 'track')
 async def author(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    cap =
     if data['min_value'] > data['max_value']:
         await callback.message.answer('Максимальное значение не может быть меньше минимального, пройти заново /choose_coin')
     else:
