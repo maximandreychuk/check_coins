@@ -21,22 +21,8 @@ git clone <repo.git>
 cd test_task_avangard
 ```
 
-Cоздать и активировать виртуальное окружение:
+Cоздать Docker образ и запустить контейнер:
 
 ```
-python3 -m venv env
-source env/bin/activate
-```
-
-Установить зависимости из файла requirements.txt(pip3 если MacOS):
-
-```
-python3 -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-Запустить проект:
-
-```
-python3 main.py
+docker build -t coin . && docker run -it coin
 ```
