@@ -31,10 +31,12 @@ docker build -t coin . && docker run -it coin
 
 1. Начать регистрацию токена для отслеживания /choose_coin
 2. Ввести монету из списка /get_coins
-   ![alt text](./images_for_readme/track.png)
 3. Ввести минимальное значение
 4. Ввести максимальное значение
 5. Начать отслеживать
 6. Ждать
+   /start просмотреть все доступные команды
 
-/start просмотреть все доступные команды
+## Пример
+
+![alt text](./images_for_readme/track.png)
