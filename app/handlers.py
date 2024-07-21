@@ -11,7 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from bs4 import BeautifulSoup as bs
 from random import randint
-# import get_coin
+
 
 router = Router()
 
@@ -78,14 +78,20 @@ async def get_coins(message: Message):
 @router.message(Command('choose_coin'))
 async def choose_coins(message: Message, state: FSMContext):
     await state.set_state(Coin.name)
-    await message.answer('Введите валюту, посмотреть список доступных валют /get_coins')
+    await message.answer('Введите название монеты, посмотреть список доступных валют /get_coins')
 
 
 @router.message(Coin.name)
 async def add_name(message: Message, state: FSMContext):
-    names = [row[0]
-             for row in csv.reader(open('/Users/semras0tresh/Desktop/dev/test_task_avangard/coins.csv'))]
-    if message.text in names:
+    coins = {row[0]: row[1]
+             for row in csv.reader(open('/Users/semras0tresh/Desktop/dev/test_task_avangard/coins.csv'))}
+    if message.text in coins.keys():
+        resp = requests.get(coins[message.text]).text
+        soup = bs(resp, 'lxml')
+        current_cap = soup.find(
+            'div', class_='sc-65e7f566-0 DDohe flexStart alignBaseline').find_next('span').text
+        current_cap = convertStr(current_cap.split('$')[1])
+        await message.answer(f'Ссылка {coins[message.text]}\nТекущая цена {current_cap}$')
         await state.update_data(name=message.text)
         await state.set_state(Coin.min_value)
         await message.answer('Введите минимальное значение')
@@ -103,31 +109,34 @@ async def add_min_value(message: Message, state: FSMContext):
 @router.message(Coin.max_value)
 async def add_min_value(message: Message, state: FSMContext):
     await state.update_data(max_value=message.text)
-
-    await message.answer(f'Нажмите чтобы отслеживать', reply_markup=kb.track)
+    await message.answer(f'Нажмите, чтобы отслеживать', reply_markup=kb.track)
 
 
 @router.callback_query(F.data == 'track')
 async def author(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    for row in csv.reader(open('/Users/semras0tresh/Desktop/dev/test_task_avangard/coins.csv')):
-        if row[0] == data["name"]:
-            resp = requests.get(row[1]).text
-            soup = bs(resp, 'lxml')
-            capital = soup.find(
-                'span', class_='sc-65e7f566-0 clvjgF base-text').text
-    capital = convertStr(capital.split('$')[1])
-    data["min_value"] = convertStr(data["min_value"])
-    data["max_value"] = convertStr(data["max_value"])
-    while capital > data["min_value"] and capital < data["max_value"]:
-        capital = soup.find(
-            'span', class_='sc-65e7f566-0 clvjgF base-text').text
+    cap =
+    if data['min_value'] > data['max_value']:
+        await callback.message.answer('Максимальное значение не может быть меньше минимального, пройти заново /choose_coin')
+    else:
+        for row in csv.reader(open('/Users/semras0tresh/Desktop/dev/test_task_avangard/coins.csv')):
+            if row[0] == data["name"]:
+                resp = requests.get(row[1]).text
+                soup = bs(resp, 'lxml')
+                capital = soup.find(
+                    'div', class_='sc-65e7f566-0 DDohe flexStart alignBaseline').find_next('span').text
         capital = convertStr(capital.split('$')[1])
         data["min_value"] = convertStr(data["min_value"])
         data["max_value"] = convertStr(data["max_value"])
-        await callback.message.answer(f'Монета отслеживается, текущая цена {capital}$')
-        time.sleep(randint(1, 5))
-    if capital <= data["min_value"]:
-        await callback.message.answer(f'Монета достигла ваш минимум {data["min_value"]}, текущая цена {capital}$')
-    elif capital >= data["max_value"]:
-        await callback.message.answer(f'Монета достигла ваш максимум {data["max_value"]}, текущая цена {capital}$')
+        await callback.message.answer(f'Монета отслеживается, текущая цена {capital}$,\nВыбрать другую монету /choose_coin')
+        while capital > data["min_value"] and capital < data["max_value"]:
+            capital = soup.find(
+                'span', class_='sc-65e7f566-0 clvjgF base-text').text
+            capital = convertStr(capital.split('$')[1])
+            data["min_value"] = convertStr(data["min_value"])
+            data["max_value"] = convertStr(data["max_value"])
+            time.sleep(randint(1, 5))
+        if capital <= data["min_value"]:
+            await callback.message.answer(f'Монета достигла ваш минимум {data["min_value"]}, текущая цена {capital}$')
+        elif capital >= data["max_value"]:
+            await callback.message.answer(f'Монета достигла ваш максимум {data["max_value"]}, текущая цена {capital}$')

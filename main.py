@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 
-TOKEN_API = '7399665611:AAGtybvKJU8Ey0YyOQE5W3-H0q1ETytWxVE'
+TOKEN_API = '7307146668:AAE270HRyagCYhjgUizFPAPygsIPpap37WE'
 bot = Bot(token=TOKEN_API)
 dp = Dispatcher(bot=bot)
 

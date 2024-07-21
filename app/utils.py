@@ -1,7 +1,7 @@
 def convertStr(s):
     try:
-        ret = float(s)
+        ret = round(float(s), 7)
     except ValueError:
         # Try float.
-        return 'Введите число'
+        return None
     return ret
