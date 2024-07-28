@@ -9,6 +9,7 @@ from .database_settings import Сurrency, db
 from .utils import getCapital, convertStr
 from . import keyboards as kb
 
+
 import csv
 import requests
 import os
@@ -31,7 +32,7 @@ class BoolFlag(StatesGroup):
 @router.message(Command('start'))
 async def start(message: Message):
     db.create_tables([Сurrency,])
-    await message.answer('Для начала нажми /reload_coins')
+    await message.answer('Для начала нажмите /reload_coins')
 
 
 @router.message(Command('help'))
@@ -41,7 +42,7 @@ async def reload_coins(message: Message):
                          '/clear_coins - очистить отслеживаемые монеты\n'
                          '/my_coins - все мои отслеживаемые монеты\n\n'
                          '/help - нажмите для просмотра доступных команд\n'
-                         '/reload_coins - обновить список топ 100 валют\n')
+                         '/reload_coins - обновить список валют\n')
 
 
 @router.message(Command('reload_coins'))
@@ -70,7 +71,7 @@ async def reload_coins(message: Message):
         titles.append(title[0])
     await message.answer(f'Этап 2 из 3 пройден')
 
-    with open(f'./coins.csv', 'w', newline='') as out_csv:
+    with open(f'./oldcoins.csv', 'w', newline='') as out_csv:
         writer = csv.writer(out_csv, delimiter=",", lineterminator="\r")
         writer.writerow(['Name', 'Link'])
         cnt = 0
@@ -80,9 +81,19 @@ async def reload_coins(message: Message):
                 links[cnt]
             ])
             cnt += 1
-    await message.answer('Отлично, теперь ты можешь добавить монету '
+
+    reader = csv.reader(open('./oldcoins.csv', 'r'), delimiter=',')
+    writer = csv.writer(open('./coins.csv', 'w'), delimiter=',')
+    entries = set()
+    for row in reader:
+        if row[0] not in entries:
+            writer.writerow(row)
+            entries.add(row[0])
+    os.remove('./oldcoins.csv')
+    await message.answer('Отлично, теперь вы можете добавить монету '
                          'для отслеживания /choose_coin\n'
-                         'Просмотреть все доступныe команды /help')
+                         'Просмотреть монеты /get_coins\n'
+                         'Все доступные команды /help')
 
 
 @router.message(Command('my_coins'))
@@ -199,7 +210,7 @@ async def author(callback: CallbackQuery, state: FSMContext):
                                           'Удалить монеты /clear_coins\n'
                                           'Добавить монету /choose_coin')
             break
-        await asyncio.sleep(randint(1, 3))
+        await asyncio.sleep(randint(3, 90))
 
 
 @router.message(Command('stop'))
