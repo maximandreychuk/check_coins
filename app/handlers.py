@@ -9,12 +9,11 @@ from .database_settings import Сurrency, db
 from .utils import getCapital, convertStr
 from . import keyboards as kb
 
-
-import csv
-import requests
-import os
-import time
 import asyncio
+import csv
+import os
+import requests
+
 
 router = Router()
 

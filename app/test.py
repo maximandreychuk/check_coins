@@ -2,14 +2,6 @@ from bs4 import BeautifulSoup as bs
 import requests
 
 
-def convertStr(s: str):
-    try:
-        ret = round(float(s), 7)
-    except ValueError:
-        return None
-    return ret
-
-
 def getCapital(link):
     resp = requests.get(link).text
     soup = bs(resp, 'lxml')
@@ -29,3 +21,8 @@ def getCapital(link):
     except ValueError:
         return 0
     return ret
+
+
+print(getCapital('https://coinmarketcap.com/currencies/bitcoin/'))
+print(getCapital('https://coinmarketcap.com/currencies/dogecoin/'))
+print(getCapital('https://coinmarketcap.com/currencies/ethereum/'))
