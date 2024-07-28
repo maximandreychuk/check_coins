@@ -1,21 +1,21 @@
-import csv
-import requests
-import sqlite3
-import time
-from .utils import convertStr
-from . import keyboards as kb
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
+from aiogram.types import Message, CallbackQuery
 from bs4 import BeautifulSoup as bs
 from random import randint
+from .database_settings import Сurrency, db
+from .utils import getCapital, convertStr
+from . import keyboards as kb
 
+import csv
+import requests
+import os
+import time
+import asyncio
 
 router = Router()
-conn = sqlite3.connect('database.db', check_same_thread=False)
-cursor = conn.cursor()
 
 
 class Coin(StatesGroup):
@@ -24,41 +24,24 @@ class Coin(StatesGroup):
     max_value = State()
 
 
+class BoolFlag(StatesGroup):
+    stop_track = State()
+
+
 @router.message(Command('start'))
 async def start(message: Message):
-    with conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS coins (
-                id INTEGER PRIMARY KEY,
-                name REAL,
-                min REAL,
-                max REAL,
-                cap REAL
-    );
-        """)
-    await message.answer(f'/choose_coin - пройти процесс добавления монеты для отслеживания \n'
+    db.create_tables([Сurrency,])
+    await message.answer('Для начала нажми /reload_coins')
+
+
+@router.message(Command('help'))
+async def reload_coins(message: Message):
+    await message.answer('/choose_coin - пройти процесс добавления монеты для отслеживания\n'
                          '/get_coins - показать все доступные для отслеживания монеты\n'
-                         '/start - нажмите для просмотра доступных команд\n'
+                         '/clear_coins - очистить отслеживаемые монеты\n'
+                         '/my_coins - все мои отслеживаемые монеты\n\n'
+                         '/help - нажмите для просмотра доступных команд\n'
                          '/reload_coins - обновить список топ 100 валют\n')
-    #  '/clear_coins - очистить отслеживаемые монеты\n'
-    #  '/my_coins - все мои отслеживаемые монеты')
-
-
-@router.message(Command('my_coins'))
-async def clear_db(message: Message):
-    cursor.execute(
-        f'SELECT * FROM coins;')
-    res = cursor.fetchall()
-    print(res)
-    await message.answer(f"(Монета, Минимум, Максимум, Цена)\n{res[0][1:]}")
-
-
-@router.message(Command('clear_coins'))
-async def clear_db(message: Message):
-    cursor.execute(
-        f'DELETE FROM coins;')
-    conn.commit()
-    await message.answer('Больше нет отслеживаемых монет\nНачать заново /choose_coins')
 
 
 @router.message(Command('reload_coins'))
@@ -97,7 +80,30 @@ async def reload_coins(message: Message):
                 links[cnt]
             ])
             cnt += 1
-    await message.answer('Успешно обновлено')
+    await message.answer('Отлично, теперь ты можешь добавить монету '
+                         'для отслеживания /choose_coin\n'
+                         'Просмотреть все доступныe команды /help')
+
+
+@router.message(Command('my_coins'))
+async def clear_db(message: Message):
+    coins_list = []
+    my_coins = Сurrency.select().where(Сurrency.user == message.from_user.username)
+    for coin in my_coins:
+        coins_list.append([f'Монета - {coin.name}', f'Минимум - {coin.min}',
+                          f'Максимум - {coin.max}',])
+    counter = 0
+    while counter < len(coins_list):
+        await message.answer(f'{coins_list[counter]}')
+        counter += 1
+    if len(coins_list) == 0:
+        await message.answer('Нет отслеживаемых монет\nДобавить /choose_coin')
+
+
+@router.message(Command('clear_coins'))
+async def clear_db(message: Message):
+    Сurrency.delete().where(Сurrency.user == message.from_user.username).execute()
+    await message.answer('Больше нет отслеживаемых монет\nНачать заново /choose_coin')
 
 
 @router.message(Command('get_coins'))
@@ -109,78 +115,101 @@ async def get_coins(message: Message):
 @router.message(Command('choose_coin'))
 async def choose_coins(message: Message, state: FSMContext):
     await state.set_state(Coin.name)
-    await message.answer('Введите название монеты, посмотреть список доступных валют /get_coins')
+    await message.answer('Введите название монеты, посмотреть '
+                         'список доступных валют /get_coins')
 
 
 @router.message(Coin.name)
 async def add_name(message: Message, state: FSMContext):
+    full_path = os.path.abspath('./coins.csv')
     coins = {row[0]: row[1]
-             for row in csv.reader(open('/Users/semras0tresh/Desktop/dev/test_task_avangard/coins.csv'))}
+             for row in csv.reader(open(full_path))}
     if message.text in coins.keys():
-        resp = requests.get(coins[message.text]).text
-        soup = bs(resp, 'lxml')
-        current_cap = soup.find(
-            'div', class_='sc-65e7f566-0 DDohe flexStart alignBaseline').find_next('span').text
-        current_cap = convertStr(current_cap.split('$')[1])
+        current_cap = getCapital(coins[message.text])
         await message.answer(f'Ссылка {coins[message.text]}\nТекущая цена {current_cap}$')
         await state.update_data(name=message.text)
-        data = await state.get_data()
-        cursor.execute(
-            f'INSERT INTO coins (name) SELECT("{data['name']}") WHERE NOT EXISTS (SELECT name FROM coins WHERE name = "{data['name']}") LIMIT 1;')
-        conn.commit()
-        cursor.execute(f'UPDATE coins SET cap = "{current_cap}" WHERE name = "{data['name']}"')
-        conn.commit()
         await state.set_state(Coin.min_value)
-        await message.answer('Введите минимальное значение')
+        await message.answer('Введите минимальное значение в формате "0.9"')
     else:
         await message.reply('Введите монету из списка')
 
 
 @router.message(Coin.min_value)
 async def add_min_value(message: Message, state: FSMContext):
-    await state.update_data(min_value=message.text)
-    data = await state.get_data()
-    cursor.execute(
-        f'UPDATE coins SET min = "{data['min_value']}" WHERE name = "{data['name']}"')
-    conn.commit()
-    await state.set_state(Coin.max_value)
-    await message.answer('Введите максимальное значение')
+    if convertStr(message.text) == None:
+        await message.answer('Не тот формат, давайте заново /choose_coin')
+    else:
+        await state.update_data(min_value=message.text)
+        await state.set_state(Coin.max_value)
+        await message.answer('Введите максимальное значение в формате "1.8"')
 
 
 @router.message(Coin.max_value)
-async def add_min_value(message: Message, state: FSMContext):
-    await state.update_data(max_value=message.text)
-    data = await state.get_data()
-    cursor.execute(
-        f'UPDATE coins SET max = "{data['max_value']}" WHERE name = "{data['name']}"')
-    conn.commit()
-    await message.answer(f'Нажмите, чтобы отслеживать', reply_markup=kb.track)
+async def add_max_value(message: Message, state: FSMContext):
+    if convertStr(message.text) == None:
+        await message.answer('Не тот формат, давайте заново /choose_coin')
+    else:
+        await state.update_data(max_value=message.text)
+        data = await state.get_data()
+        data_source = [
+            {'user': f'{message.from_user.username}',
+             'name': f'{data['name']}',
+             'min': f'{data['min_value']}',
+             'max': f'{data['max_value']}'},
+        ]
+        Сurrency.insert_many(data_source).execute()
+        await message.answer(f'Нажмите, чтобы отслеживать или '
+                             'добавить еще монету /choose_coin',
+                             reply_markup=kb.track)
 
 
 @router.callback_query(F.data == 'track')
 async def author(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if data['min_value'] > data['max_value']:
-        await callback.message.answer('Максимальное значение не может быть меньше минимального, пройти заново /choose_coin')
-    else:
-        for row in csv.reader(open('/Users/semras0tresh/Desktop/dev/test_task_avangard/coins.csv')):
-            if row[0] == data["name"]:
-                resp = requests.get(row[1]).text
-                soup = bs(resp, 'lxml')
-                capital = soup.find(
-                    'div', class_='sc-65e7f566-0 DDohe flexStart alignBaseline').find_next('span').text
-        capital = convertStr(capital.split('$')[1])
-        data["min_value"] = convertStr(data["min_value"])
-        data["max_value"] = convertStr(data["max_value"])
-        await callback.message.answer(f'Монета отслеживается, текущая цена {capital}$,\nВыбрать другую монету /choose_coin')
-        while capital > data["min_value"] and capital < data["max_value"]:
-            capital = soup.find(
-                'span', class_='sc-65e7f566-0 clvjgF base-text').text
-            capital = convertStr(capital.split('$')[1])
-            data["min_value"] = convertStr(data["min_value"])
-            data["max_value"] = convertStr(data["max_value"])
-            time.sleep(randint(1, 5))
-        if capital <= data["min_value"]:
-            await callback.message.answer(f'Монета достигла ваш минимум {data["min_value"]}, текущая цена {capital}$')
-        elif capital >= data["max_value"]:
-            await callback.message.answer(f'Монета достигла ваш максимум {data["max_value"]}, текущая цена {capital}$')
+    await callback.message.answer(f'Монеты отслеживаются\n\n'
+                                  'Остановить /stop')
+    coin_info_list = []
+    for users_row in Сurrency.select().where(Сurrency.user == callback.from_user.username):
+        coin_info_list.append([users_row.name, users_row.min, users_row.max])
+
+    await state.update_data({'stop_track': True})
+    coin_bool_list = [0 for _ in range(len(coin_info_list))]
+    full_path = os.path.abspath('./coins.csv')
+    while (await state.get_data()).get('stop_track'):
+        for row in csv.reader(open(full_path)):
+            for item in coin_info_list:
+                if row[0] == item[0]:
+                    if len(item) < 4:
+                        item.append(getCapital(row[1]))
+                    else:
+                        item[3] == getCapital(row[1])
+        for item in coin_info_list:
+            if item[3] > item[2]:  # если цена больше максимума
+                await callback.message.answer(f'Монета {item[0]} выше максимума'
+                                              f' {item[2]}, её цена {item[3]}')
+                coin_info_list.remove(item)
+                del coin_bool_list[0]
+            elif item[3] < item[1]:  # если цена меньше минимума
+                await callback.message.answer(f'Монета {item[0]} ниже минимума'
+                                              f' {item[1]}, её цена {item[3]}')
+                coin_info_list.remove(item)
+                del coin_bool_list[0]
+
+        if len(coin_bool_list) == 0:
+            await callback.message.answer(f'Больше нечего отслеживать :(\n'
+                                          'Удалить монеты /clear_coins\n'
+                                          'Добавить монету /choose_coin')
+            break
+        await asyncio.sleep(randint(1, 3))
+
+
+@router.message(Command('stop'))
+async def stop(message: Message, state: FSMContext):
+    await state.update_data({'stop_track': False})
+    await message.answer('Бот остановлен')
+
+
+@router.message(Command('drop_981'))
+async def get_coins(message: Message):
+    """Cлужебная команда(удаление таблицы)."""
+    db.drop_tables(Сurrency)
+    await message.answer('ОК')
