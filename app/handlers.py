@@ -152,10 +152,10 @@ async def add_max_value(message: Message, state: FSMContext):
         await state.update_data(max_value=message.text)
         data = await state.get_data()
         data_source = [
-            {'user': f'{message.from_user.username}',
-             'name': f'{data['name']}',
-             'min': f'{data['min_value']}',
-             'max': f'{data['max_value']}'},
+            {'user': message.from_user.username,
+             'name': data['name'],
+             'min': data['min_value'],
+             'max': data['max_value']},
         ]
         Сurrency.insert_many(data_source).execute()
         await message.answer(f'Нажмите, чтобы отслеживать или '
