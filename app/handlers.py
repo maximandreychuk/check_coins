@@ -196,12 +196,12 @@ async def author(callback: CallbackQuery, state: FSMContext):
                     else:
                         item[3] == getCapital(row[1])
         for item in coin_info_list:
-            if item[3] > item[2]:  # если цена больше максимума
+            if float(item[3]) > item[2]:  # если цена больше максимума
                 await callback.message.answer(f'Монета {item[0]} выше максимума'
                                               f' {item[2]}, её цена {item[3]}')
                 coin_info_list.remove(item)
                 del coin_bool_list[0]
-            elif item[3] < item[1]:  # если цена меньше минимума
+            elif float(item[3]) < item[1]:  # если цена меньше минимума
                 await callback.message.answer(f'Монета {item[0]} ниже минимума'
                                               f' {item[1]}, её цена {item[3]}')
                 coin_info_list.remove(item)
