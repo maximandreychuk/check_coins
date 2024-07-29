@@ -22,6 +22,7 @@ class Coin(StatesGroup):
     name = State()
     min_value = State()
     max_value = State()
+    stop_track = State()
 
 
 class BoolFlag(StatesGroup):
@@ -59,8 +60,8 @@ async def reload_coins(message: Message):
     await message.answer(f'Этап 1 из 3 пройден')
 
     titles = []
-    for r in links:
-        detail_resp = requests.get(r).text
+    for link in links:
+        detail_resp = requests.get(link).text
         detail_soup = bs(detail_resp, 'lxml')
         try:
             title = detail_soup.find(
@@ -167,6 +168,7 @@ async def add_max_value(message: Message, state: FSMContext):
              'min': data['min_value'],
              'max': data['max_value']},
         ]
+        await state.clear()
         Сurrency.insert_many(data_source).execute()
         await message.answer(f'Нажмите, чтобы отслеживать или '
                              'добавить еще монету /choose_coin',
@@ -180,6 +182,7 @@ async def author(callback: CallbackQuery, state: FSMContext):
     coin_info_list = []
     for users_row in Сurrency.select().where(Сurrency.user == callback.from_user.username):
         coin_info_list.append([users_row.name, users_row.min, users_row.max])
+    await callback.message.answer(f'{coin_info_list}')
 
     await state.update_data({'stop_track': True})
     coin_bool_list = [0 for _ in range(len(coin_info_list))]
